@@ -94,6 +94,20 @@ def test_get_all_executables_pathsep(path, pathsep):
         Path_mock.assert_has_calls([call(p) for p in path.split(pathsep)], True)
 
 
+@pytest.mark.usefixtures('no_memoize', 'os_environ_pathsep')
+@pytest.mark.parametrize('path, pathsep, excluded', [
+    ('/foo:/bar:/baz:/foo/bar:/mnt/foo', ':', '/mnt/foo'),
+    (r'C:\\foo;C:\\bar;C:\\baz;C:\\foo\\bar;Z:\\foo', ';', r'Z:\\foo')])
+def test_get_all_executables_exclude_paths(path, pathsep, excluded, settings):
+    settings.init()
+    settings.excluded_search_path_prefixes = [excluded]
+    with patch('thefuck.utils.Path') as Path_mock:
+        get_all_executables()
+        path_list = path.split(pathsep)
+        assert call(path_list[-1]) not in Path_mock.mock_calls
+        assert all(call(p) in Path_mock.mock_calls for p in path_list[:-1])
+
+
 @pytest.mark.parametrize('args, result', [
     (('apt-get instol vim', 'instol', 'install'), 'apt-get install vim'),
     (('git brnch', 'brnch', 'branch'), 'git branch')])
@@ -132,6 +146,8 @@ def test_get_all_matched_commands(stderr, result):
 
 @pytest.mark.usefixtures('no_memoize')
 @pytest.mark.parametrize('script, names, result', [
+    ('/usr/bin/git diff', ['git', 'hub'], True),
+    ('/bin/hdfs dfs -rm foo', ['hdfs'], True),
     ('git diff', ['git', 'hub'], True),
     ('hub diff', ['git', 'hub'], True),
     ('hg diff', ['git', 'hub'], False)])
@@ -141,6 +157,8 @@ def test_is_app(script, names, result):
 
 @pytest.mark.usefixtures('no_memoize')
 @pytest.mark.parametrize('script, names, result', [
+    ('/usr/bin/git diff', ['git', 'hub'], True),
+    ('/bin/hdfs dfs -rm foo', ['hdfs'], True),
     ('git diff', ['git', 'hub'], True),
     ('hub diff', ['git', 'hub'], True),
     ('hg diff', ['git', 'hub'], False)])
@@ -217,7 +235,7 @@ class TestCache(object):
 
 
 class TestGetValidHistoryWithoutCurrent(object):
-    @pytest.yield_fixture(autouse=True)
+    @pytest.fixture(autouse=True)
     def fail_on_warning(self):
         warnings.simplefilter('error')
         yield

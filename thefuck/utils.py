@@ -104,6 +104,10 @@ def get_close_matches(word, possibilities, n=None, cutoff=0.6):
     return difflib_get_close_matches(word, possibilities, n, cutoff)
 
 
+def include_path_in_search(path):
+    return not any(path.startswith(x) for x in settings.excluded_search_path_prefixes)
+
+
 @memoize
 def get_all_executables():
     from thefuck.shells import shell
@@ -119,6 +123,7 @@ def get_all_executables():
 
     bins = [exe.name.decode('utf8') if six.PY2 else exe.name
             for path in os.environ.get('PATH', '').split(os.pathsep)
+            if include_path_in_search(path)
             for exe in _safe(lambda: list(Path(path).iterdir()), [])
             if not _safe(exe.is_dir, True)
             and exe.name not in tf_entry_points]
@@ -175,13 +180,13 @@ def is_app(command, *app_names, **kwargs):
         raise TypeError("got an unexpected keyword argument '{}'".format(kwargs.keys()))
 
     if len(command.script_parts) > at_least:
-        return command.script_parts[0] in app_names
+        return os.path.basename(command.script_parts[0]) in app_names
 
     return False
 
 
 def for_app(*app_names, **kwargs):
-    """Specifies that matching script is for on of app names."""
+    """Specifies that matching script is for one of app names."""
     def _for_app(fn, command):
         if is_app(command, *app_names, **kwargs):
             return fn(command)
@@ -289,10 +294,15 @@ def cache(*depends_on):
 cache.disabled = False
 
 
-def get_installation_info():
-    import pkg_resources
+def get_installation_version():
+    try:
+        from importlib.metadata import version
 
-    return pkg_resources.require('thefuck')[0]
+        return version('thefuck')
+    except ImportError:
+        import pkg_resources
+
+        return pkg_resources.require('thefuck')[0].version
 
 
 def get_alias():
